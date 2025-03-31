@@ -140,8 +140,11 @@ impl MinecraftServer {
             .args(self.java_args.clone())
             .arg("-jar")
             .arg(&self.server_jar)
-            .arg(if self.gui { "--gui" } else { "--nogui" })
             .current_dir(&self.server_path);
+
+            if !self.gui {
+                command.arg("--nogui");
+            }
         command
     }
 }
