@@ -1,4 +1,4 @@
-use std::{io::{BufRead, BufReader, BufWriter, Write}, process::{Command, Stdio}};
+use std::process::{Command, Stdio};
 
 pub struct MinecraftServerBuilder {
     server_path: Option<String>,
@@ -87,49 +87,11 @@ impl MinecraftServer {
 
     pub fn run(&mut self) -> Result<(), std::io::Error> {
         let mut server = self.get_command()
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             .spawn()
             .unwrap();
-
-        let stdin = server.stdin.take().unwrap();
-        let stdout = server.stdout.take().unwrap();
-        let stderr = server.stderr.take().unwrap();
-
-        let stdout_thread = std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(line) => println!("{}", line),
-                    Err(e) => eprintln!("Error reading stdout: {}", e),
-                }
-            }
-        });
-
-        let stderr_thread = std::thread::spawn(move || {
-            let reader = std::io::BufReader::new(stderr);
-            for line in reader.lines() {
-                match line {
-                    Ok(line) => eprintln!("{}", line),
-                    Err(e) => eprintln!("Error reading stderr: {}", e),
-                }
-            }
-        });
-
-        let stdin_thread = std::thread::spawn(move || {
-            let mut writer = BufWriter::new(stdin);
-            loop {
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input).unwrap();
-                writer.write_all(input.as_bytes()).unwrap();
-                writer.flush().unwrap();
-            }
-        });
-
-        stdout_thread.join().unwrap();
-        stderr_thread.join().unwrap();
-        stdin_thread.join().unwrap();
         let _ = server.wait().unwrap();
         Ok(())
     }
