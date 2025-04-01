@@ -1,4 +1,4 @@
-use std::process::{Command, Stdio};
+use std::{fmt::Debug, process::{Command, Stdio}};
 
 pub struct MinecraftServerBuilder {
     server_path: Option<String>,
@@ -13,9 +13,9 @@ impl MinecraftServerBuilder {
         MinecraftServerBuilder {
             server_path: None,
             server_jar: None,
-            java_path: Some("java".to_string()),
+            java_path: None,
             java_args: None,
-            gui: Some(false),
+            gui: None,
         }
     }
 
@@ -45,25 +45,40 @@ impl MinecraftServerBuilder {
     }
     
     pub fn build(self) -> Result<MinecraftServer, MinecraftServerBuildError> {
-        if self.server_path.is_none() {
-            return Err(MinecraftServerBuildError::MissingServerPath);
-        } else if self.server_jar.is_none() {
-            return Err(MinecraftServerBuildError::MissingServerJar);
+        let server_path = self.server_path.ok_or(MinecraftServerBuildError::MissingServerPath)?;
+        let server_jar = self.server_jar.ok_or(MinecraftServerBuildError::MissingServerJar)?;
+        
+        if !std::path::Path::new(&server_path).exists() {
+            return Err(MinecraftServerBuildError::InvalidServerPath(server_path));
         }
+        
+        let java_path = self.java_path.unwrap_or("java".to_string());
+        if Command::new(&java_path).arg("--version").output().is_err() {
+            return Err(MinecraftServerBuildError::InvalidJavaPath(java_path));
+        }
+
         Ok(MinecraftServer {
-            server_path: self.server_path.unwrap(),
-            server_jar: self.server_jar.unwrap(),
-            java_path: self.java_path.unwrap(),
+            server_path,
+            server_jar,
+            java_path,
             java_args: self.java_args.unwrap_or_default(),
             gui: self.gui.unwrap_or(false),
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum MinecraftServerBuildError {
+    #[error("server path is missing")]
     MissingServerPath,
+    #[error("server jar file is missing")]
     MissingServerJar,
+    #[error("invalid server path: {0}")]
+    InvalidServerPath(String),
+    #[error("invalid Java path: {0}")]
+    InvalidJavaPath(String),
+    #[error("failed to execute command: {0}")]
+    CommandExecutionError(#[from] std::io::Error),
 }
 
 pub struct MinecraftServer {
@@ -90,9 +105,8 @@ impl MinecraftServer {
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
-            .spawn()
-            .unwrap();
-        let _ = server.wait().unwrap();
+            .spawn()?;
+        let _ = server.wait()?;
         Ok(())
     }
 
